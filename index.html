@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>NPC Rivals - Block FPS</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#10131a;font-family:Arial;color:white;touch-action:none}
+canvas{display:block;width:100vw;height:100vh;background:#202632}
+#hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;font-weight:bold;font-size:18px;text-shadow:0 2px 3px #000;pointer-events:none}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font-size:32px;font-weight:bold;text-shadow:0 3px 5px #000;pointer-events:none}
+#start{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:16px 26px;border:0;border-radius:12px;background:#fff;color:#111;font-size:20px;font-weight:bold}
+#cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px;border:2px solid white;border-radius:50%;box-sizing:border-box;pointer-events:none}
+#shoot{position:fixed;right:24px;bottom:28px;width:82px;height:82px;border-radius:50%;border:2px solid #fff8;background:#e33;color:#fff;font-weight:bold;font-size:16px}
+#reload{position:fixed;right:125px;bottom:40px;padding:13px 16px;border:0;border-radius:10px;background:#ddd;color:#111;font-weight:bold}
+#joy{position:fixed;left:22px;bottom:25px;width:120px;height:120px;border-radius:50%;background:#ffffff22;border:2px solid #fff5}
+#stick{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:#fff8}
+#help{position:fixed;bottom:5px;left:50%;transform:translateX(-50%);font-size:12px;opacity:.7;white-space:nowrap}
+</style>
+
+<style>
+:root{--panel:#161b24dd;--line:#ffffff22;--accent:#ffb21a}
+body{background:#090b10!important;font-family:Arial Black,Arial,sans-serif!important}
+canvas{background:linear-gradient(#6fb4e8 0 48%,#477b45 48% 100%)!important}
+#hud{top:10px;left:10px;right:10px;align-items:flex-start;font-size:14px}
+#score,#ammo{background:var(--panel);border:2px solid var(--line);padding:9px 13px;border-radius:5px;box-shadow:0 4px 0 #0008;letter-spacing:.4px}
+#score{color:#fff}
+#ammo{color:#ffd35a}
+#cross{width:20px;height:20px;margin:-10px;border:0;border-radius:0}
+#cross:before,#cross:after{content:"";position:absolute;background:#fff;box-shadow:0 0 3px #000}
+#cross:before{width:3px;height:20px;left:8px;top:0}
+#cross:after{height:3px;width:20px;left:0;top:8px}
+#shoot{right:20px;bottom:25px;width:88px;height:88px;border-radius:8px;border:3px solid #fff;background:#e94747;color:#fff;box-shadow:0 5px 0 #8c2020;font-size:15px}
+#reload{right:122px;bottom:45px;border:3px solid #222;border-radius:6px;background:#f2f2f2;color:#111;box-shadow:0 4px 0 #777;font-size:13px}
+#joy{left:18px;bottom:20px;width:128px;height:128px;border-radius:10px;background:#1118;border:3px solid #fff4;box-shadow:inset 0 0 0 2px #0005}
+#stick{left:37px;top:37px;width:54px;height:54px;border-radius:8px;background:#eee9;border:2px solid #fff8}
+#msg{font-size:36px;text-transform:uppercase;letter-spacing:2px}
+#start{border:3px solid #222;border-radius:6px;background:#fff;color:#111;box-shadow:0 5px 0 #777;font-size:19px}
+#help{background:#0009;padding:5px 10px;border-radius:4px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="score">You 0 - 0 NPCs</span><span id="ammo">Ammo: 12/60</span></div>
+<div id="cross"></div>
+<div id="joy"><div id="stick"></div></div>
+<button id="reload">RELOAD</button>
+<button id="shoot">FIRE</button>
+
+<div id="hotbar" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;z-index:5">
+ <button class="gun" data-gun="blaster" style="width:70px;height:54px;background:#171b24e8;border:2px solid #ffbd2e;border-radius:5px;color:#fff;text-align:center;padding-top:5px;font-size:10px">1<br><b>BLASTER</b></button>
+ <button class="gun" data-gun="shotgun" style="width:70px;height:54px;background:#171b24e8;border:2px solid #ffffff33;border-radius:5px;color:#fff;text-align:center;padding-top:5px;font-size:10px">2<br><b>SHOTGUN</b></button>
+ <button class="gun" data-gun="sniper" style="width:70px;height:54px;background:#171b24e8;border:2px solid #ffffff33;border-radius:5px;color:#fff;text-align:center;padding-top:5px;font-size:10px">3<br><b>SNIPER</b></button>
+</div>
+<div id="equipped" style="position:fixed;right:20px;bottom:125px;background:#171b24e8;border:3px solid #ffbd2e;border-radius:6px;padding:8px 12px;font-weight:900;font-size:13px;z-index:5">EQUIPPED: BLASTER</div>
+<div id="msg">NPC RIVALS</div>
+<button id="start">START MATCH</button>
+<div id="help">Move: joystick/WASD • Aim: drag screen • Fire: FIRE/Space</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,playing=false,score=0,npcScore=0,ammo=12,reserve=60,reloading=false;
+let player={x:0,y:0,hp:100,ang:0};
+let gun='blaster';
+const guns={blaster:{damage:34,ammo:12,max:12,spread:0},shotgun:{damage:24,ammo:6,max:6,spread:4},sniper:{damage:100,ammo:4,max:4,spread:0}};
+let bots=[],shots=[],last=0,aimDX=0;
+let pointerStart=null;
+
+function resize(){W=cv.width=innerWidth*devicePixelRatio;H=cv.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);W=innerWidth;H=innerHeight}
+addEventListener('resize',resize);resize();
+function spawn(){bots=[];for(let i=0;i<5;i++)bots.push({x:(Math.random()*2-1)*500,y:(Math.random()*2-1)*350,hp:100,alive:true,cool:Math.random()*1.5});}
+function reset(){score=npcScore=0;gun='blaster';ammo=12;reserve=60;player={x:0,y:0,hp:100,ang:0};spawn();update();}
+function update(){document.getElementById('score').textContent=`You ${score} - ${npcScore} NPCs`;document.getElementById('ammo').textContent=`Ammo: ${ammo}/${reserve}`;}
+function equip(name){gun=name; ammo=guns[gun].ammo; reserve=gun==='sniper'?20:60; document.querySelectorAll('.gun').forEach(b=>b.style.borderColor=b.dataset.gun===gun?'#ffbd2e':'#ffffff33'); document.getElementById('equipped').textContent='EQUIPPED: '+gun.toUpperCase(); update();}
+function fireAt(screenX,screenY){
+ if(!playing||reloading||ammo<=0){if(ammo<=0)reload();return}
+ ammo--;
+ const dx=screenX-W/2, dy=screenY-H/2;
+ const len=Math.hypot(dx,dy)||1;
+ const ux=dx/len, uy=dy/len;
+ let hit=null,bestDist=Infinity;
+ for(const b of bots) if(b.alive){
+   const sx=W/2+(b.x-player.x), sy=H/2+(b.y-player.y);
+   const px=sx-W/2, py=sy-H/2;
+   const along=px*ux+py*uy;
+   const perp=Math.abs(px*uy-py*ux);
+   const radius=28;
+   if(along>0 && along<len+300 && perp<radius && along<bestDist){hit=b;bestDist=along;}
+ }
+ if(hit){
+   hit.hp-=guns[gun].damage;
+   if(hit.hp<=0){hit.hp=0;hit.alive=false;score++;setTimeout(()=>{hit.alive=true;hit.hp=100;hit.x=(Math.random()*2-1)*500;hit.y=(Math.random()*2-1)*350},1200)}
+ }
+ shots.push({x1:W/2,y1:H/2,x2:screenX,y2:screenY,t:.12,hit:!!hit});
+ update();
+}
+function fire(){fireAt(W/2,H/2)}
+
+function reload(){if(reloading||ammo===guns[gun].max||reserve<=0)return;reloading=true;setTimeout(()=>{let n=Math.min(guns[gun].max-ammo,reserve);ammo+=n;reserve-=n;reloading=false;update()},700)}
+function loop(t){let dt=Math.min(.04,(t-last)/1000||0);last=t;if(playing){
+ let speed=220;player.x+=moveX*speed*dt*Math.cos(player.ang)-moveY*speed*dt*Math.sin(player.ang);player.y+=moveX*speed*dt*Math.sin(player.ang)+moveY*speed*dt*Math.cos(player.ang);
+ for(const b of bots)if(b.alive){let dx=player.x-b.x,dy=player.y-b.y,d=Math.hypot(dx,dy);if(d>150){b.x+=dx/d*45*dt;b.y+=dy/d*45*dt}else{b.cool-=dt;if(b.cool<=0){b.cool=1+Math.random();let a=Math.atan2(player.y-b.y,player.x-b.x),err=(Math.random()-.5)*.25;if(Math.abs(Math.atan2(Math.sin(a-player.ang),Math.cos(a-player.ang)))>.35||Math.random()<.25){player.hp-=12;if(player.hp<=0){npcScore++;player.hp=100;player.x=0;player.y=0;}}}}}
+}
+for(let i=shots.length-1;i>=0;i--){shots[i].t-=dt;if(shots[i].t<=0)shots.splice(i,1)}
+ draw();requestAnimationFrame(loop)}
+function draw(){
+ctx.clearRect(0,0,W,H);ctx.fillStyle='#78b957';ctx.fillRect(0,0,W,H);
+// Classic Roblox-baseplate-inspired ground: green plate, square grid and studs.
+ctx.save();
+ctx.globalAlpha=.95;
+const cell=50;
+for(let x=-1000;x<=1000;x+=cell){for(let y=-800;y<=800;y+=cell){
+ const sx=W/2+(x-player.x), sy=H/2+(y-player.y);
+ if(sy<0||sy>H||sx<-60||sx>W+60) continue;
+ ctx.fillStyle=((Math.floor((x+1000)/cell)+Math.floor((y+800)/cell))%2===0)?'#79bd59':'#72b452';
+ ctx.fillRect(sx,sy,cell,cell);
+ ctx.strokeStyle='#4d913d';ctx.lineWidth=1;ctx.strokeRect(sx,sy,cell,cell);
+ ctx.fillStyle='#9bd478';ctx.fillRect(sx+3,sy+3,5,5);
+}}
+ctx.restore();
+for(const b of bots)if(b.alive){let sx=W/2+(b.x-player.x),sy=H/2+(b.y-player.y);if(sx>-50&&sx<W+50&&sy>-50&&sy<H+50){
+ctx.fillStyle='#e84b4b';ctx.fillRect(sx-18,sy-18,36,36);
+ctx.fillStyle='#333';ctx.fillRect(sx-13,sy-8,7,7);ctx.fillRect(sx+6,sy-8,7,7);
+ctx.fillStyle='#fff';ctx.fillRect(sx-18,sy-32,36,6);ctx.fillStyle='#41e35d';ctx.fillRect(sx-18,sy-32,36*(b.hp/100),6);
+ctx.fillStyle='#fff';ctx.font='11px Arial';ctx.textAlign='center';ctx.fillText('NPC',sx,sy+34)}}
+for(const s of shots){ctx.save();ctx.globalAlpha=Math.max(0,s.t/.12);ctx.strokeStyle=s.hit?'#ffdf4d':'#ffffff';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();ctx.restore();}
+ctx.fillStyle='#4da3ff';ctx.beginPath();ctx.arc(W/2,H/2,10,0,7);ctx.fill();
+}
+let moveX=0,moveY=0,joy=document.getElementById('joy'),stick=document.getElementById('stick');
+function joyMove(e){let r=joy.getBoundingClientRect(),x=(e.clientX-r.left-60)/45,y=(e.clientY-r.top-60)/45,d=Math.hypot(x,y);if(d>1){x/=d;y/=d}moveX=x;moveY=y;stick.style.left=(35+x*25)+'px';stick.style.top=(35+y*25)+'px'}
+joy.addEventListener('pointerdown',e=>{joy.setPointerCapture(e.pointerId);joyMove(e)});joy.addEventListener('pointermove',e=>{if(e.buttons)joyMove(e)});joy.addEventListener('pointerup',()=>{moveX=moveY=0;stick.style.left='35px';stick.style.top='35px'});
+let lastX=null;
+cv.addEventListener('pointerdown',e=>{lastX=e.clientX;pointerStart={x:e.clientX,y:e.clientY}});
+cv.addEventListener('pointermove',e=>{if(lastX!==null){player.ang+=(e.clientX-lastX)*.006;lastX=e.clientX}});
+cv.addEventListener('pointerup',e=>{if(pointerStart){const moved=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);if(moved<12)fireAt(e.clientX,e.clientY);}lastX=null;pointerStart=null});
+document.getElementById('shoot').onpointerdown=fire;document.getElementById('reload').onpointerdown=reload;
+document.querySelectorAll('.gun').forEach(b=>b.addEventListener('pointerdown',()=>equip(b.dataset.gun)));
+addEventListener('keydown',e=>{if(e.key==='1')equip('blaster');if(e.key==='2')equip('shotgun');if(e.key==='3')equip('sniper')});
+equip('blaster');
+addEventListener('keydown',e=>{if(e.code==='Space')fire();if(e.key.toLowerCase()==='r')reload();if(e.key==='a')moveX=-1;if(e.key==='d')moveX=1;if(e.key==='w')moveY=1;if(e.key==='s')moveY=-1});
+addEventListener('keyup',e=>{if('wasd'.includes(e.key.toLowerCase())){if(e.key==='a'||e.key==='d')moveX=0;if(e.key==='w'||e.key==='s')moveY=0}});
+document.getElementById('start').onclick=()=>{playing=true;document.getElementById('start').style.display='none';document.getElementById('msg').style.display='none';reset()};
+reset();requestAnimationFrame(loop);
+</script>
+</body></html>
